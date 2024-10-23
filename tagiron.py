@@ -2,15 +2,8 @@ import pygame
 import pygame.freetype
 import random
 
-
 # Pygameの初期化
 pygame.init()
-
-# freetypeを使って日本語フォントを読み込む
-freetype = pygame.freetype.SysFont("Noto Sans CJK JP", 48)
-button_font = pygame.freetype.SysFont("Noto Sans CJK JP", 36)
-small_font = pygame.freetype.SysFont("Noto Sans CJK JP", 24)
-
 
 # 画面サイズの設定
 screen_width = 1300
@@ -18,10 +11,10 @@ screen_height = 700
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("タギロン")
 
-
 # 色の定義
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
+
 RED = (255, 100, 100)
 BLUE = (100, 100, 255)
 YELLOW = (255, 255, 100)
@@ -29,6 +22,7 @@ DARK_GRAY = (50, 50, 50)
 LIGHT_GRAY = (200, 200, 200)
 BUTTON_COLOR = (70, 130, 180)
 BUTTON_HOVER_COLOR = (100, 149, 237)
+
 def draw_simple_green_background():
     screen.fill((224, 255, 224))  # ライトグリーンの背景
 
@@ -41,21 +35,25 @@ left_shift = 280  # 左に移動する量
 # ボタンの座標設定
 one_player_button_rect = pygame.Rect((screen_width // 2 - button_width // 2, 250), (button_width, button_height))
 two_player_button_rect = pygame.Rect((screen_width // 2 - button_width // 2, 350), (button_width, button_height))
-switch_turn_button_rect = pygame.Rect((screen_width // 2 - button_width // 2, screen_height - 200), (button_width, button_height))  # ターン切り替えボタン
+# ボタンの座標設定
+switch_turn_button_rect = pygame.Rect((screen_width // 2 - button_width + 300 // 2, screen_height - 130), (button_width, button_height))  # ターン切り替えボタン
+
+
+# 質問ボタンの座標
 ask_button_rect = pygame.Rect((screen_width // 2 - button_width - button_margin // 2 - left_shift, screen_height - 130), (button_width, button_height))  # 上段左
 answer_button_rect = pygame.Rect((screen_width // 2 + button_margin // 2 - left_shift, screen_height - 130), (button_width, button_height))  # 上段右
 history_button_rect = pygame.Rect((screen_width // 2 - button_width - button_margin // 2 - left_shift, screen_height - 70), (button_width, button_height))  # 下段左
 end_button_rect = pygame.Rect((screen_width // 2 + button_margin // 2 - left_shift, screen_height - 70), (button_width, button_height))  # 下段右
+
 back_button_rect = pygame.Rect((screen_width // 2 - button_width // 2, screen_height - 100), (button_width, button_height))
 
-# ボタンを描画する関数
-def draw_button(screen, rect, text, font):
-    mouse_pos = pygame.mouse.get_pos()
-    if rect.collidepoint(mouse_pos):
-        pygame.draw.rect(screen, BUTTON_HOVER_COLOR, rect, border_radius=15)
-    else:
-        pygame.draw.rect(screen, BUTTON_COLOR, rect, border_radius=15)
-    font.render_to(screen, (rect.x + 20, rect.y + 15), text, WHITE)
+
+
+# 各プレイヤーの推測情報を保持
+player1_selected_numbers = ['?'] * 5
+player2_selected_numbers = ['?'] * 5
+player1_card_colors = [LIGHT_GRAY] * 5
+player2_card_colors = [LIGHT_GRAY] * 5
 
 
 # 背景グラデーションを描画する関数
@@ -64,6 +62,18 @@ def draw_gradient_background():
         color_value = int(255 * (i / screen_height))
         pygame.draw.line(screen, (color_value, color_value, color_value), (0, i), (screen_width, i))
 
+
+    
+# グローバル変数の初期化
+is_end_screen = False  # 終了画面のフラグを初期化
+dropdown_active = [False] * 5  # 5枚のカードに対応するドロップダウンの開閉状態
+dropdown_rects = [[] for _ in range(5)]  # 各カードに対応するドロップダウンの矩形リスト
+
+
+# freetypeを使って日本語フォントを読み込む
+freetype = pygame.freetype.SysFont("Noto Sans CJK JP", 48)
+button_font = pygame.freetype.SysFont("Noto Sans CJK JP", 36)
+small_font = pygame.freetype.SysFont("Noto Sans CJK JP", 24)
 
 
 # タイルのセットアップ（赤と青の0〜9、黄色の5が2枚）
@@ -88,7 +98,6 @@ def generate_hands():
 
     return player_hand, opponent_hand
 
-
 # プレイヤーと相手のカードセットアップ
 player_hand, opponent_hand = generate_hands()
 
@@ -97,13 +106,92 @@ card_height = 150
 card_margin = 10
 
 
-# グローバル変数の初期化
-is_end_screen = False  # 終了画面のフラグを初期化
-dropdown_active = [False] * 5  # 5枚のカードに対応するドロップダウンの開閉状態
-dropdown_rects = [[] for _ in range(5)]  # 各カードに対応するドロップダウンの矩形リスト
+# 質問リスト (全体の質問)
+all_questions = [
+    "赤の数の合計数は？", "青の数の合計数は？", "赤の数字タイルは何枚ある？", "青の数字タイルは何枚ある？",
+    "タイルすべての合計数は？", "数字タイルの最大の数から最小の数を引いた数は？", "大きいほうから3枚の合計数は？",
+    "小さいほうから3枚の合計数は？", "中央の3枚の合計数は？", "同じ数字タイルのペアは何組ある？",
+    "連番になっているタイルはどこ？", "連続して隣り合っている同じ色はどこ？", "5はどこ？",
+    "1または2はどこ？", "3または4はどこ？", "6または7はどこ？", "8または9はどこ？", "0はどこ？",
+    "偶数は何枚ある？", "奇数は何枚ある？", "中央の数字タイルは5以上？4以下？"
+]
+
+current_questions = []  # 表示される質問のリスト
+show_questions = False  # 質問を表示するかどうかのフラグ
+answer_text = ""  # 質問に対する答えを表示するためのテキスト
+question_screen = False  # 質問リスト画面かどうかのフラグ
+question_answered = False  # 質問に答えが表示されたかどうかのフラグ
+question_count = 0  # 質問回数
+choose_screen = False  # 選択画面のフラグ
+option1_button_rect = pygame.Rect((screen_width // 4 - button_width // 2, screen_height // 2), (button_width, button_height))
+option2_button_rect = pygame.Rect((screen_width * 3 // 4 - button_width // 2, screen_height // 2), (button_width, button_height))
+selected_question = ""  # 選択された質問を保存する変数
 
 
 
+# 質問と回答の履歴を保持するリスト
+history = []
+
+# 質問と回答を履歴に追加する関数
+def record_answer(question, answer):
+    history.append(f"Q: {question}\nA: {answer}")
+
+# 質問履歴画面を描画する関数
+def draw_history_screen(question_history):
+    screen.fill(WHITE)
+    small_font.render_to(screen, (screen_width // 2 - 100, 50), "質問履歴", BLACK)  # タイトル表示
+
+    # 質問履歴を描画
+    for i, (question, answer) in enumerate(question_history):
+        question_text = f"{i + 1}. {question} -> {answer}"
+        small_font.render_to(screen, (100, 100 + i * 40), question_text, BLACK)
+
+    # 戻るボタンを描画
+    draw_button(screen, back_button_rect, "戻る", button_font)
+    
+# ボタンを描画する関数
+def draw_button(screen, rect, text, font):
+    mouse_pos = pygame.mouse.get_pos()
+    if rect.collidepoint(mouse_pos):
+        pygame.draw.rect(screen, BUTTON_HOVER_COLOR, rect, border_radius=15)
+    else:
+        pygame.draw.rect(screen, BUTTON_COLOR, rect, border_radius=15)
+    font.render_to(screen, (rect.x + 20, rect.y + 15), text, WHITE)
+
+# カードの色を取得する関数
+def get_card_color(color):
+    if color in ["赤", "red"]:
+        return RED
+    elif color in ["青", "blue"]:
+        return BLUE
+    elif color in ["黄", "yellow"]:
+        return YELLOW
+    return LIGHT_GRAY
+
+
+# 回答ボタンが押されたときの処理
+def handle_answer_button_click(selected_numbers, opponent_hand, opponent_card_colors):
+    correct = True
+    for i, (color, number) in enumerate(opponent_hand):
+        if selected_numbers[i] != number or opponent_card_colors[i] != get_card_color(color):
+            correct = False
+            break
+    
+    if correct:
+        print(f"正解です！{question_count}回の質問で当てました！")  # コンソールに出力する（デバッグ用）
+        return True  # 正解の場合はTrueを返して終了画面に切り替える
+    else:
+        print("不正解です。もう一度試してください。")
+        return False  # 不正解の場合はFalseを返す
+        
+
+def draw_choose_screen(option1, option2):
+    screen.fill(WHITE)
+    small_font.render_to(screen, (screen_width // 2 - 100, 100), "どちらを選びますか？", BLACK)
+    draw_button(screen, option1_button_rect, option1, button_font)
+    draw_button(screen, option2_button_rect, option2, button_font)
+
+    
 # プレイヤーのカードを描画する関数
 def draw_player_hand():
     for i, (color, number) in enumerate(player_hand):
@@ -122,6 +210,7 @@ def draw_player_hand():
         small_font.render_to(screen, (text_x, text_y), number_text, BLACK)
 
 
+        
 # 相手のカードを描画する関数（クリックごとに色を変える）
 def draw_opponent_hand_placeholder(opponent_card_colors, selected_numbers, number_inputs):
     card_x_start = 100  # カードの表示開始位置
@@ -148,10 +237,42 @@ def draw_opponent_hand_placeholder(opponent_card_colors, selected_numbers, numbe
 
         # ドロップダウンリストの描画
         options = list(range(10))  # 0〜9の選択肢
-        draw_dropdown(screen, button_x, button_y - 50, card_width // 2, 30, options, dropdown_active[i], i)        
+        draw_dropdown(screen, button_x, button_y - 50, card_width // 2, 30, options, dropdown_active[i], i)
 
 
-# 色の順序を定義
+        
+# 相手のカードがクリックされたときに色を変更する処理
+def handle_opponent_card_click(mouse_pos):
+    global opponent_card_colors
+    card_x_start = 100  # カードの表示開始位置
+    card_y = 50  # カードのy位置（上部に表示）
+    
+    for i in range(5):  # 相手のカード5枚分
+        card_x = card_x_start + i * (card_width + card_margin)
+        card_rect = pygame.Rect(card_x, card_y, card_width, card_height)
+        
+        if card_rect.collidepoint(mouse_pos):
+            current_color = opponent_card_colors[i]
+            # 色を次の色に変更
+            if current_color == LIGHT_GRAY:
+                opponent_card_colors[i] = RED
+            elif current_color == RED:
+                opponent_card_colors[i] = BLUE
+            elif current_color == BLUE:
+                opponent_card_colors[i] = YELLOW
+            elif current_color == YELLOW:
+                opponent_card_colors[i] = LIGHT_GRAY
+        
+def handle_opponent_card_click(mouse_pos, opponent_card_colors):
+    card_positions = [
+        pygame.Rect(100, 50, card_width, card_height),  # 1枚目
+        pygame.Rect(220, 50, card_width, card_height),  # 2枚目
+        pygame.Rect(340, 50, card_width, card_height),  # 3枚目
+        pygame.Rect(460, 50, card_width, card_height),  # 4枚目
+        pygame.Rect(580, 50, card_width, card_height)   # 5枚目
+    ]
+
+    # 色の順序を定義
     color_order = [LIGHT_GRAY, RED, BLUE, YELLOW]  # 修正ポイント：定義されていなかった color_order を追加
 
     for i, card_rect in enumerate(card_positions):
@@ -159,7 +280,68 @@ def draw_opponent_hand_placeholder(opponent_card_colors, selected_numbers, numbe
             current_color = opponent_card_colors[i]
             new_color_index = (color_order.index(current_color) + 1) % len(color_order)
             opponent_card_colors[i] = color_order[new_color_index]
-            break        
+            break
+
+
+            
+                
+# 相手のカードを描画する関数（答えの表示）
+def draw_opponent_hand():
+    for i, (color, number) in enumerate(opponent_hand):
+        x = 100 + i * (card_width + card_margin)
+        y = screen_height // 2 - card_height // 2  # 相手のカードは画面中央に表示
+        card_color = get_card_color(color)
+        pygame.draw.rect(screen, card_color, [x, y, card_width, card_height], border_radius=10)
+        small_font.render_to(screen, (x + 30, y + 60), str(number), BLACK)
+
+# 終了画面の描画関数
+# 終了画面の描画関数
+def draw_end_screen(player1_hand, player2_hand):
+    screen.fill(WHITE)
+    small_font.render_to(screen, (screen_width // 2 - 100, 50), "ゲーム終了", BLACK)  # タイトル表示
+
+    # 上側にplayer1のカードを表示
+    for i, (color, number) in enumerate(player1_hand):
+        x = 100 + i * (card_width + card_margin)
+        y = 100  # player1のカードは上部に表示
+        card_color = get_card_color(color)
+        pygame.draw.rect(screen, card_color, [x, y, card_width, card_height], border_radius=10)
+        small_font.render_to(screen, (x + 30, y + 60), str(number), BLACK)
+
+    # 下側にplayer2のカードを表示
+    for i, (color, number) in enumerate(player2_hand):
+        x = 100 + i * (card_width + card_margin)
+        y = 300  # player2のカードは下部に表示
+        card_color = get_card_color(color)
+        pygame.draw.rect(screen, card_color, [x, y, card_width, card_height], border_radius=10)
+        small_font.render_to(screen, (x + 30, y + 60), str(number), BLACK)
+
+    # ゲーム終了時のメッセージを表示
+    message = f"正解です！{question_count}回の質問で当てました！"
+    small_font.render_to(screen, (screen_width // 2 - 150, 500), message, BLACK)  # メッセージを表示
+    
+# 質問回数を表示する関数
+def draw_question_count():
+    small_font.render_to(screen, (screen_width - 200, 20), f"質問回数: {question_count}", BLACK)
+
+
+
+# 回答するボタンが押された時に、色と数字の一致を確認する処理
+def handle_answer_button_click(selected_numbers, opponent_hand, opponent_card_colors):
+    global question_count  # グローバル変数として宣言
+    correct = True
+    for i, (color, number) in enumerate(opponent_hand):
+        if selected_numbers[i] != number or opponent_card_colors[i] != get_card_color(color):
+            correct = False
+            break
+    
+    if correct:
+        print("正解です！ゲームを終了します。")
+        return True  # 正解の場合はTrueを返して終了
+    else:
+        print("不正解です。質問回数が1増加します。")
+        question_count += 1  # 不正解の場合、質問回数を1増やすペナルティ
+        return False  # 不正解の場合はFalseを返す
 
 
 
@@ -177,7 +359,7 @@ def draw_dropdown(screen, x, y, width, height, options, active, card_index):
             # ドロップダウンが描画されているか確認するためのデバッグ出力
             print(f"Dropdown item {option} at {option_rect.x}, {option_rect.y}")
 
-            
+
 def handle_number_input_dropdown(mouse_pos, number_inputs, selected_numbers):
     for i, rect in enumerate(number_inputs):
         if rect.collidepoint(mouse_pos):
@@ -186,64 +368,17 @@ def handle_number_input_dropdown(mouse_pos, number_inputs, selected_numbers):
                 selected_numbers[i] = 0  # 初期値が '?' の場合は 0 に設定
             else:
                 selected_numbers[i] = (selected_numbers[i] + 1) % 10  # 0〜9でループ
-
-
-            
-# 相手のカードがクリックされたときに色を変更する処理
-def handle_opponent_card_click(mouse_pos, opponent_card_colors):
-    card_positions = [
-        pygame.Rect(100, 50, card_width, card_height),  # 1枚目
-        pygame.Rect(220, 50, card_width, card_height),  # 2枚目
-        pygame.Rect(340, 50, card_width, card_height),  # 3枚目
-        pygame.Rect(460, 50, card_width, card_height),  # 4枚目
-        pygame.Rect(580, 50, card_width, card_height)   # 5枚目
-    ]
-
-    
-                
-
-# プレイヤーのカードを描画する関数
-def draw_player_hand(player_hand):
-    for i, (color, number) in enumerate(player_hand):
-        x = 100 + i * (card_width + card_margin)
-        y = screen_height - card_height - 150  # プレイヤーのカードは画面下部に表示
-        card_color = get_card_color(color)
         
-        # カードを描画（色付き）
-        pygame.draw.rect(screen, card_color, [x, y, card_width, card_height], border_radius=10)
-        
-        # 数字をカードの中央に大きく描画
-        number_text = str(number)
-        text_rect = small_font.get_rect(number_text)
-        text_x = x + (card_width - text_rect.width) // 2
-        text_y = y + (card_height - text_rect.height) // 2
-        small_font.render_to(screen, (text_x, text_y), number_text, BLACK)   
-
-    
-# 質問リスト (全体の質問)
-all_questions = [
-    "赤の数の合計数は？", "青の数の合計数は？", "赤の数字タイルは何枚ある？", "青の数字タイルは何枚ある？",
-    "タイルすべての合計数は？", "数字タイルの最大の数から最小の数を引いた数は？", "大きいほうから3枚の合計数は？",
-    "小さいほうから3枚の合計数は？", "中央の3枚の合計数は？", "同じ数字タイルのペアは何組ある？",
-    "連番になっているタイルはどこ？", "連続して隣り合っている同じ色はどこ？", "5はどこ？",
-    "1または2はどこ？", "3または4はどこ？", "6または7はどこ？", "8または9はどこ？", "0はどこ？",
-    "偶数は何枚ある？", "奇数は何枚ある？", "中央の数字タイルは5以上？4以下？"
-]
-
-
 # 質問をランダムに選んで表示する関数
 def initialize_questions():
     global current_questions
     num_questions = min(6, len(all_questions))
     current_questions = random.sample(all_questions, num_questions)
 
-
 # 質問を描画する関数
 def draw_questions():
     for i, question in enumerate(current_questions):
-        draw_button(screen, pygame.Rect(100, 50 + i * 50, 600, 40), question, small_font)    
-
-
+        draw_button(screen, pygame.Rect(100, 50 + i * 50, 600, 40), question, small_font)
 
 # プレイヤーが質問を選び、相手の手札に対して応答する関数
 def answer_question(question, opponent_hand, choice=None):
@@ -414,26 +549,32 @@ def answer_question(question, opponent_hand, choice=None):
             return "中央の数字タイルは4以下です。"
 
 
+            
 
-def draw_choose_screen(option1, option2):
-    screen.fill(WHITE)
-    small_font.render_to(screen, (screen_width // 2 - 100, 100), "どちらを選びますか？", BLACK)
-    draw_button(screen, option1_button_rect, option1, button_font)
-    draw_button(screen, option2_button_rect, option2, button_font)
-           
-
-current_questions = []  # 表示される質問のリスト
-show_questions = False  # 質問を表示するかどうかのフラグ
-answer_text = ""  # 質問に対する答えを表示するためのテキスト
-question_screen = False  # 質問リスト画面かどうかのフラグ
-question_answered = False  # 質問に答えが表示されたかどうかのフラグ
-question_count = 0  # 質問回数
-choose_screen = False  # 選択画面のフラグ
-option1_button_rect = pygame.Rect((screen_width // 4 - button_width // 2, screen_height // 2), (button_width, button_height))
-option2_button_rect = pygame.Rect((screen_width * 3 // 4 - button_width // 2, screen_height // 2), (button_width, button_height))
-selected_question = ""  # 選択された質問を保存する変数
+            
+# 1人用モードの描画
+def draw_single_player_mode(opponent_card_colors, selected_numbers, number_inputs):
+    draw_simple_green_background()  # 薄い緑色の背景を描画
+    draw_player_hand(player_hand)
+    draw_opponent_hand_placeholder(opponent_card_colors, selected_numbers, number_inputs)  # 相手のカードの?表示
+    draw_button(screen, ask_button_rect, "質問する", button_font)
+    draw_button(screen, answer_button_rect, "回答する", button_font)
+    draw_button(screen, end_button_rect, "終了", button_font)  # 終了ボタンを追加
+    draw_button(screen, history_button_rect, "履歴", button_font)  # 履歴ボタンを追加
+    draw_question_count()  # 質問回数を表示            
 
 
+# メイン画面の描画関数
+def draw_main_menu():
+    draw_gradient_background()
+    draw_simple_green_background()  # シンプルな緑の背景を描画
+    freetype.render_to(screen, (screen_width // 2 - 100, 100), "タギロン", BLACK)
+    draw_button(screen, one_player_button_rect, "1人用", button_font)
+    draw_button(screen, two_player_button_rect, "2人用", button_font)
+
+
+    
+    
 # 質問リスト画面の描画関数
 def draw_question_screen():
     screen.fill(WHITE)
@@ -442,99 +583,70 @@ def draw_question_screen():
         small_font.render_to(screen, (100, 400), answer_text, BLACK)  # 答えを表示
     draw_button(screen, back_button_rect, "戻る", button_font)  # 戻るボタンを描画
 
+# ゲームモードを開始する関数
+def start_game(mode):
+    global show_questions, answer_text, question_screen, question_answered, question_count, player_turn
+    if mode == "1人用":
+        show_questions = False
+        answer_text = ""
+        question_screen = False
+        question_answered = False
+        question_count = 0
+        player_turn = 1  # プレイヤー1が開始
+        return "1人用"
+    elif mode == "2人用":
+        show_questions = False
+        answer_text = ""
+        question_screen = False
+        question_answered = False
+        question_count = 0
+        player_turn = 1  # プレイヤー1からスタート
+        return "2人用"
 
-# カードの色を取得する関数
-def get_card_color(color):
-    if color in ["赤", "red"]:
-        return RED
-    elif color in ["青", "blue"]:
-        return BLUE
-    elif color in ["黄", "yellow"]:
-        return YELLOW
-    return LIGHT_GRAY
-
-    
-
-# 質問と回答を履歴に追加する関数
-def record_answer(question, answer):
-    history.append(f"Q: {question}\nA: {answer}")
-
-# 質問と回答の履歴を保持するリスト
-history = []
-
-# 各プレイヤーの推測情報を保持
-player1_selected_numbers = ['?'] * 5
-player2_selected_numbers = ['?'] * 5
-player1_card_colors = [LIGHT_GRAY] * 5
-player2_card_colors = [LIGHT_GRAY] * 5
-
-
-# 質問履歴画面を描画する関数
-def draw_history_screen(question_history):
-    screen.fill(WHITE)
-    small_font.render_to(screen, (screen_width // 2 - 100, 50), "質問履歴", BLACK)  # タイトル表示
-
-    # 質問履歴を描画
-    for i, (question, answer) in enumerate(question_history):
-        question_text = f"{i + 1}. {question} -> {answer}"
-        small_font.render_to(screen, (100, 100 + i * 40), question_text, BLACK)
-
-    # 戻るボタンを描画
-    draw_button(screen, back_button_rect, "戻る", button_font)
-
-
-
-# 回答するボタンが押された時に、色と数字の一致を確認する処理
-def handle_answer_button_click(selected_numbers, opponent_hand, opponent_card_colors):
-    global question_count  # グローバル変数として宣言
-    correct = True
-    for i, (color, number) in enumerate(opponent_hand):
-        if selected_numbers[i] != number or opponent_card_colors[i] != get_card_color(color):
-            correct = False
-            break
-    
-    if correct:
-        print("正解です！ゲームを終了します。")
-        return True  # 正解の場合はTrueを返して終了
+# ターンの切り替え時に相手の推測情報をリセットする
+def switch_turn():
+    global player_turn, player1_selected_numbers, player2_selected_numbers
+    player_turn = 1 if player_turn == 2 else 2
+    if player_turn == 1:
+        player2_selected_numbers = ['?'] * 5  # プレイヤー2が終了したらリセット
     else:
-        print("不正解です。質問回数が1増加します。")
-        question_count += 1  # 不正解の場合、質問回数を1増やすペナルティ
-        return False  # 不正解の場合はFalseを返す
+        player1_selected_numbers = ['?'] * 5  # プレイヤー1が終了したらリセット        
 
-
-# 終了画面の描画関数
-def draw_end_screen(player1_hand, player2_hand):
-    screen.fill(WHITE)
-    small_font.render_to(screen, (screen_width // 2 - 100, 50), "ゲーム終了", BLACK)  # タイトル表示
-
-    # 上側にplayer1のカードを表示
-    for i, (color, number) in enumerate(player1_hand):
-        x = 100 + i * (card_width + card_margin)
-        y = 100  # player1のカードは上部に表示
-        card_color = get_card_color(color)
-        pygame.draw.rect(screen, card_color, [x, y, card_width, card_height], border_radius=10)
-        small_font.render_to(screen, (x + 30, y + 60), str(number), BLACK)
-
-    # 下側にplayer2のカードを表示
-    for i, (color, number) in enumerate(player2_hand):
-        x = 100 + i * (card_width + card_margin)
-        y = 300  # player2のカードは下部に表示
-        card_color = get_card_color(color)
-        pygame.draw.rect(screen, card_color, [x, y, card_width, card_height], border_radius=10)
-        small_font.render_to(screen, (x + 30, y + 60), str(number), BLACK)
-
-    # ゲーム終了時のメッセージを表示
-    message = f"正解です！{question_count}回の質問で当てました！"
-    small_font.render_to(screen, (screen_width // 2 - 150, 500), message, BLACK)  # メッセージを表示
+def draw_two_player_mode(player_hand, opponent_hand, opponent_card_colors, selected_numbers, number_inputs):
+    """
+    2人用モードの画面を描画する関数。
+    player_hand: 現在のプレイヤーの手札
+    opponent_hand: 相手の手札（推測対象）
+    opponent_card_colors: 現在のプレイヤーが推測した相手のカードの色（推測用）
+    selected_numbers: 現在のプレイヤーが推測した相手の数字
+    number_inputs: 数字入力用のボタンリスト
+    """
+    draw_simple_green_background()  # 背景を描画
     
-# 質問回数を表示する関数
-def draw_question_count():
-    small_font.render_to(screen, (screen_width - 200, 20), f"質問回数: {question_count}", BLACK)
-
-        
+    # 現在のプレイヤーの手札を画面下部に描画
+    draw_player_hand(player_hand)
+    
+    # 相手のカードを推測用に描画（現在のプレイヤーが推測した内容を表示）
+    draw_opponent_hand_placeholder(opponent_card_colors, selected_numbers, number_inputs)
+    
+    # 質問する、回答する、終了、履歴ボタンを描画
+    draw_button(screen, ask_button_rect, "質問する", button_font)
+    draw_button(screen, answer_button_rect, "回答する", button_font)
+    draw_button(screen, end_button_rect, "終了", button_font)
+    draw_button(screen, history_button_rect, "履歴", button_font)
+    
+    # 現在のターンを表示
+    turn_text = f"Player {player_turn}のターン"
+    small_font.render_to(screen, (screen_width - 300, 20), turn_text, BLACK)
+    
+    # 相手のターンへ切り替えボタンを描画
+    draw_button(screen, switch_turn_button_rect, "相手のターンへ", button_font)
+    
+    # 質問回数を表示
+    draw_question_count()
 
     
-# 2人プレイヤーのターンの切り替え    
+    
 def handle_two_player_turns(mouse_pos):
     global question_screen, question_answered, answer_text, is_end_screen, is_history_screen, question_history
 
@@ -593,132 +705,29 @@ def switch_turn():
     player_turn = 2 if player_turn == 1 else 1
             
 
-
-# ターンの切り替え時に相手の推測情報をリセットする
-def switch_turn():
-    global player_turn, player1_selected_numbers, player2_selected_numbers
-    player_turn = 1 if player_turn == 2 else 2
-    if player_turn == 1:
-        player2_selected_numbers = ['?'] * 5  # プレイヤー2が終了したらリセット
-    else:
-        player1_selected_numbers = ['?'] * 5  # プレイヤー1が終了したらリセット
+# プレイヤーのカードを描画する関数
+def draw_player_hand(player_hand):
+    for i, (color, number) in enumerate(player_hand):
+        x = 100 + i * (card_width + card_margin)
+        y = screen_height - card_height - 150  # プレイヤーのカードは画面下部に表示
+        card_color = get_card_color(color)
         
-    
+        # カードを描画（色付き）
+        pygame.draw.rect(screen, card_color, [x, y, card_width, card_height], border_radius=10)
+        
+        # 数字をカードの中央に大きく描画
+        number_text = str(number)
+        text_rect = small_font.get_rect(number_text)
+        text_x = x + (card_width - text_rect.width) // 2
+        text_y = y + (card_height - text_rect.height) // 2
+        small_font.render_to(screen, (text_x, text_y), number_text, BLACK)            
             
 # プレイヤーのターンを表示する関数
 def draw_player_turn():
     turn_text = f"Player {player_turn}のターンです"
     small_font.render_to(screen, (screen_width // 2 - 100, 20), turn_text, BLACK)
 
-
-    
-# 回答ボタンが押されたときの処理
-def handle_answer_button_click(selected_numbers, opponent_hand, opponent_card_colors):
-    correct = True
-    for i, (color, number) in enumerate(opponent_hand):
-        if selected_numbers[i] != number or opponent_card_colors[i] != get_card_color(color):
-            correct = False
-            break
-    
-    if correct:
-        print(f"正解です！{question_count}回の質問で当てました！")  # コンソールに出力する（デバッグ用）
-        return True  # 正解の場合はTrueを返して終了画面に切り替える
-    else:
-        print("不正解です。もう一度試してください。")
-        return False  # 不正解の場合はFalseを返す
         
-
-# 相手のカードを描画する関数（答えの表示）
-def draw_opponent_hand():
-    for i, (color, number) in enumerate(opponent_hand):
-        x = 100 + i * (card_width + card_margin)
-        y = screen_height // 2 - card_height // 2  # 相手のカードは画面中央に表示
-        card_color = get_card_color(color)
-        pygame.draw.rect(screen, card_color, [x, y, card_width, card_height], border_radius=10)
-        small_font.render_to(screen, (x + 30, y + 60), str(number), BLACK)
-
-
-
-# メイン画面の描画関数
-def draw_main_menu():
-    draw_gradient_background()
-    draw_simple_green_background()  # シンプルな緑の背景を描画
-    freetype.render_to(screen, (screen_width // 2 - 100, 100), "タギロン", BLACK)
-    draw_button(screen, one_player_button_rect, "1人用", button_font)
-    draw_button(screen, two_player_button_rect, "2人用", button_font)
-
-
-# ゲームモードを開始する関数
-def start_game(mode):
-    global show_questions, answer_text, question_screen, question_answered, question_count, player_turn
-    if mode == "1人用":
-        show_questions = False
-        answer_text = ""
-        question_screen = False
-        question_answered = False
-        question_count = 0
-        player_turn = 1  # プレイヤー1が開始
-        return "1人用"
-    elif mode == "2人用":
-        show_questions = False
-        answer_text = ""
-        question_screen = False
-        question_answered = False
-        question_count = 0
-        player_turn = 1  # プレイヤー1からスタート
-        return "2人用"
-        
-
-    
-# 1人用モードの描画
-def draw_single_player_mode(opponent_card_colors, selected_numbers, number_inputs):
-    draw_simple_green_background()  # 薄い緑色の背景を描画
-    draw_player_hand(player_hand)
-    draw_opponent_hand_placeholder(opponent_card_colors, selected_numbers, number_inputs)  # 相手のカードの?表示
-    draw_button(screen, ask_button_rect, "質問する", button_font)
-    draw_button(screen, answer_button_rect, "回答する", button_font)
-    draw_button(screen, end_button_rect, "終了", button_font)  # 終了ボタンを追加
-    draw_button(screen, history_button_rect, "履歴", button_font)  # 履歴ボタンを追加
-    draw_question_count()  # 質問回数を表示
-
-
-# 2人用モードの描画    
-def draw_two_player_mode(player_hand, opponent_hand, opponent_card_colors, selected_numbers, number_inputs):
-    """
-    2人用モードの画面を描画する関数。
-    player_hand: 現在のプレイヤーの手札
-    opponent_hand: 相手の手札（推測対象）
-    opponent_card_colors: 現在のプレイヤーが推測した相手のカードの色（推測用）
-    selected_numbers: 現在のプレイヤーが推測した相手の数字
-    number_inputs: 数字入力用のボタンリスト
-    """
-    draw_simple_green_background()  # 背景を描画
-    
-    # 現在のプレイヤーの手札を画面下部に描画
-    draw_player_hand(player_hand)
-    
-    # 相手のカードを推測用に描画（現在のプレイヤーが推測した内容を表示）
-    draw_opponent_hand_placeholder(opponent_card_colors, selected_numbers, number_inputs)
-    
-    # 質問する、回答する、終了、履歴ボタンを描画
-    draw_button(screen, ask_button_rect, "質問する", button_font)
-    draw_button(screen, answer_button_rect, "回答する", button_font)
-    draw_button(screen, end_button_rect, "終了", button_font)
-    draw_button(screen, history_button_rect, "履歴", button_font)
-    
-    # 現在のターンを表示
-    turn_text = f"Player {player_turn}のターン"
-    small_font.render_to(screen, (screen_width - 300, 20), turn_text, BLACK)
-    
-    # 相手のターンへ切り替えボタンを描画
-    draw_button(screen, switch_turn_button_rect, "相手のターンへ", button_font)
-    
-    # 質問回数を表示
-    draw_question_count()
-
-
-
-
 # 画面のメインループ
 def main():
     running = True
@@ -862,4 +871,3 @@ def main():
     pygame.quit()
 # ゲームの開始
 main()
-    
